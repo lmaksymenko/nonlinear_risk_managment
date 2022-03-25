@@ -1,265 +1,367 @@
 #Imports
 {
-  defaultW <- getOption("warn") 
-  options(warn = -1) 
-  
-  library(MASS)
-  library(caret)
-  library(data.table)
-  library(doParallel)
-  library(rattle)
-  library(plyr)
-  library(testthat)
-  library(checkmate)
-  library(ALEPlot)
-  library(segmented)
-  library(xtable)
-  library(quantmod)
-  library(lubridate)
-  library(GGally)
-  library(plm)
-  library(parallel)
-  library(plotly)
-  library(numDeriv)
-  
-  options(warn = defaultW)
+   defaultW <- getOption("warn") 
+   options(warn = -1) 
+   
+   library(MASS)
+   library(caret)
+   library(data.table)
+   library(doParallel)
+   library(rattle)
+   library(plyr)
+   library(testthat)
+   library(checkmate)
+   library(ALEPlot)
+   library(segmented)
+   library(xtable)
+   library(quantmod)
+   library(lubridate)
+   library(GGally)
+   library(plm)
+   library(parallel)
+   library(plotly)
+   library(numDeriv)
+   
+   options(warn = defaultW)
+   
+   #clear env
+   rm(list = ls())
+   
+   #graph output dir
+   setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+   output.dir <- getwd()
+   fig.dir <- paste(output.dir,"/Figures/",sep = "")
 }
 
+
+env_setup <- function(model_list)
 {
-  #clear env
-  rm(list = ls())
-  
-  #graph output dir
-  setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-  output.dir <- getwd()
-  fig.dir <- paste(output.dir,"/Figures/",sep = "")
-  
-  
-  #make dirs if needed
-  for(m in model_list){
-    wd = paste(fig.dir, "/", m, sep = "")
-    if ( !(dir.exists(wd)) ) {
-      dir.create(wd)
-    }else{
-      do.call(file.remove, list(list.files(wd, full.names = TRUE)))
-    }
-  }
-  
+   #make dirs if needed
+   for(m in model_list){
+      wd = paste(fig.dir, "/", m, sep = "")
+      if ( !(dir.exists(wd)) ) {
+         dir.create(wd)
+      }else{
+         do.call(file.remove, list(list.files(wd, full.names = TRUE)))
+      }
+   }
+   
 }
 
-
+#Psudocode
+#define models to be used
+#train model
+### model training params
+#
+#
 
 gen_data <- function()
 {
-  
+   
 }
 
 # function to compute number of features
 feature_used <- function(pred, feature, sample_size)
 {
-  dat <- pred$trainingData
-  fvalues = dat[,feature] 
-  # permute feature
-  dat2 = dat[sample(1:nrow(dat), size = sample_size, replace = TRUE),]
-  prediction1 = predict(pred,dat2)
-  
-  sampled_fvalues = sapply(dat2[,feature], function(x){
-    sample(setdiff(fvalues, x), size = 1)
-  })
-  
-  dat2 <- data.table(dat2)
-  dat2 = dat2[, (feature) := sampled_fvalues]
-  dat2$.outcome <- NULL
-  prediction2 = predict(pred,dat2)
-  
-  plot(prediction1~prediction2)
-  
-  if (any(( prediction1 - prediction2) != 0)) 
-    return(TRUE)
-  FALSE
+   dat <- pred$trainingData
+   fvalues = dat[,feature] 
+   # permute feature
+   dat2 = dat[sample(1:nrow(dat), size = sample_size, replace = TRUE),]
+   prediction1 = predict(pred,dat2)
+   
+   sampled_fvalues = sapply(dat2[,feature], function(x){
+      sample(setdiff(fvalues, x), size = 1)
+   })
+   
+   dat2 <- data.table(dat2)
+   dat2 = dat2[, (feature) := sampled_fvalues]
+   dat2$.outcome <- NULL
+   prediction2 = predict(pred,dat2)
+   
+   plot(prediction1~prediction2)
+   
+   if (any(( prediction1 - prediction2) != 0)) 
+      return(TRUE)
+   FALSE
 }
 
 
-fit_model <- function(formula, model, train, test, control)
+fit_model <- function(formula, model, x_var, y_var, train, test, control)
 {
-  cat("Fitting ", model, "\n")
-  
-  train_model <- train(formula, data = train, method = model,
-                       trControl = control,
-                       # preProcess = c("center", "scale"),
-                       tuneLength = 10)
-  
-  y_hat_i <- predict(train_model, test[,x_var])
-  y_true <- test[,y_var]
-  
-  #plot(y_true~y_hat_i)
-  #summary(lm(y_true~y_hat_i))$adj
-  
-  mse = mean((test[,"Y"] - y_hat_i)^2)
-  
-  return(train_model, mse, y_hat_i)
+   cat("Fitting ", model, "\n")
+   
+   train_model <- train(formula, data = train, method = model,
+                        trControl = control,
+                        # preProcess = c("center", "scale"),
+                        tuneLength = 10)
+   print('MOdel:')
+   print(class(train_model))
+   
+   y_hat_i <- predict(train_model, test[,x_var])
+   y_true <- test[,y_var]
+   
+   #plot(y_true~y_hat_i)
+   #summary(lm(y_true~y_hat_i))$adj
+   
+   mse = mean((test[,"Y"] - y_hat_i)^2)
+   
+   NF <- sapply(x_var, function(x) feature_used(train_model, x, 500) )
+   num_feat_used = sum(NF)
+   
+   return(c(train_model, mse, y_hat_i, num_feat_used))
 }
 
 
-fit_ale <- function(model, train, test, x_var, y_hat_i)
-{
-  f_0 <- mean(y_hat_i)
-  f_ale_1st  <- f_0
-  
-  
-  
-  yhat <- function(X.model, newdata) as.numeric(predict(X.model, newdata, type = "raw"))
-  
-  for (v in x_var) {
-    ## Do ALE
-    j <- which(v == x_var)
-    ale_j <- ALEPlot(train, model, pred.fun = yhat, J = j,
-                     K = 10^2, NA.plot = TRUE)
-    
-    loess_j <- loess(ale_j$f.values ~ ale_j$x.values, span = 0.1)
-    
-    f_j_ale <- predict(loess_j, train[,v]) # based on the ale, we compute the approximation
-    
-    # f_j_ale <- f_j_ale - mean(f_j_ale)
-    f_ale_1st <- f_ale_1st + f_j_ale
-    
-    {
-      file.i <- paste0(fig.dir, model_i,"/ALE","_",j,".pdf")
-      pdf(file.i)
-      plot(ale_j$f.values~ale_j$x.values,
-           ylab = "ALE", xlab = expression(x[j]),
-           pch = 20, cex = 0.5)
-      lines(predict(loess_j, ale_j$x.values)~ale_j$x.values, col = 2)
-      grid(10)
-      dev.off()
-    }
-  }
-  #we need to return all the of the ales for each variable from this function
-  
-}
+#using the predicted y_hats and the model calculate the ale plot for each x_variable
+#return the ale values (ig thats all we want)
+#
 
-
-calc_mec <- function(ale, tol, )
+fit_ale <- function(model, x_var, train, y_hat_i)
 {
-  epsilon <- 0.05 # set tolerance
-  
-  
-  MEC_try_function <- function(ale_j) {
-    x <- ale_j$x.values
-    y <- ale_j$f.values
-    K <- 1
-    
-    lm_j <- lm(y ~ x)
-    Rsq_j <- summary(lm_j)$adj
-    seg_fit_j <- fitted(lm_j)
-    
-    ds_plot <- data.frame(seg_fit_j,y,x)
-    ds_plot <- ds_plot[order(ds_plot$x),]
-    
-    {
-    file.i <- paste0(fig.dir,model_i,"/MEC","_",j,".pdf")
-    pdf(file.i)
-    plot(seg_fit_j~x,pch = 20,type = "l", data = ds_plot,
-         ylab = "ALE", xlab = expression(x[j]), lwd = 2)
-    lines(y ~ x, data = ds_plot,col = 2)
-    grid(10)
-    dev.off()
-    }
-    
-    
-    #why does this need a try catch??
-    while(Rsq_j < 1 - epsilon) {
-      cat("This is ",K,"\n")
-      seg_j <- segmented(lm_j, seg.Z = ~ x, npsi = K)
-      seg_fit_j <- fitted(seg_j)
-      Rsq_j <- summary(lm(y~seg_fit_j))$adj
-      K <- K + 1
+   print('doing ale')
+   ale_Js <- c()
+   var_Js <- c()
+   
+   f_0 <- mean(y_hat_i)
+   f_ale_1st  <- f_0
+   
+   yhat <- function(X.model, newdata) as.numeric(predict(X.model, newdata, type = "raw"))#error here
+   
+   print('before')
+   print(class(model))
+   yhat(model, train)
+   print('past')
+   for (v in x_var) {
       
-      ds_plot <- data.frame(seg_fit_j,y,x)
-      ds_plot <- ds_plot[order(ds_plot$x),]
+      print(class(train))
+      print(class(v))
+      
+      j <- which(v == x_var)
+      
+      ale_j <- ALEPlot(train, model, pred.fun = yhat, J = j, #this is where the error is 
+                       K = 10^2, NA.plot = TRUE)#K will need to be changed later
+      
+      ale_Js <- c(ale_Js, ale_j)
+      
+      loess_j <- loess(ale_j$f.values ~ ale_j$x.values, span = 0.1)
+      
+      f_j_ale <- predict(loess_j, train[,v]) # based on the ale, we compute the approximation, exists for each factor
+      
+      # f_j_ale <- f_j_ale - mean(f_j_ale)
+      f_ale_1st <- f_ale_1st + f_j_ale
+      
+      var_Js <- c(var_Js, var(f_j_ale))
       
       {
-      pdf(file.i)
-      plot(seg_fit_j~x,pch = 20,type = "l", data = ds_plot,
-           ylab = "ALE", xlab = expression(x[j]), lwd = 2)
-      lines(y ~ x, data = ds_plot,col = 2)
-      grid(10)
-      dev.off()
+         file.i <- paste0(fig.dir, model,"/ALE","_",j,".pdf")
+         pdf(file.i)
+         plot(ale_j$f.values~ale_j$x.values,
+              ylab = "ALE", xlab = expression(x[j]),
+              pch = 20, cex = 0.5)
+         lines(predict(loess_j, ale_j$x.values)~ale_j$x.values, col = 2)
+         grid(10)
+         dev.off()
       }
-    }
-    
-    return(K)
-    
-  }
+   }
+   
+   # compute IAS
+   IAS1 <- sum((y_hat_i - f_ale_1st)^2)
+   IAS2 <- sum((y_hat_i - f_0)^2)
+   IAS <- IAS1/IAS2
+ 
+   return(list(ale_Js, var_Js, IAS)) #return the ale_j plots, V_j
+   #returning in this format flattens the lists
+}
+
+
+calc_mec <- function(model, x_var,  ale_j, tol, V)#ale_j (the plot), tol is epsilon, 
+{
+   epsilon <- 0.05 # set tolerance
+   MEC <- c()
+   
+   for (v in x_var){
+      MEC_try_function <- function(ale_j) {
+         #dumb index workaround...
+         x <- ale_j$x.values
+         y <- ale_j$f.values
+         K <- 1
+         
+         lm_j <- lm(y ~ x)
+         Rsq_j <- summary(lm_j)$adj
+         seg_fit_j <- fitted(lm_j)
+         
+         ds_plot <- data.frame(seg_fit_j,y,x)
+         ds_plot <- ds_plot[order(ds_plot$x),]
+         
+         {
+            j <- which(v == x_var)
+            file.i <- paste0(fig.dir, model,"/MEC","_",j,".pdf")
+            pdf(file.i)
+            plot(seg_fit_j~x,pch = 20,type = "l", data = ds_plot,
+                 ylab = "ALE", xlab = expression(x[j]), lwd = 2)
+            lines(y ~ x, data = ds_plot,col = 2)
+            grid(10)
+            dev.off()
+         }
+         
+         #why does this need a try catch??
+         while(Rsq_j < 1 - epsilon) {
+            cat("This is ",K,"\n")
+            seg_j <- segmented(lm_j, seg.Z = ~ x, npsi = K)
+            seg_fit_j <- fitted(seg_j)
+            Rsq_j <- summary(lm(y~seg_fit_j))$adj
+            K <- K + 1
+            
+            ds_plot <- data.frame(seg_fit_j,y,x)
+            ds_plot <- ds_plot[order(ds_plot$x),]
+            
+            {
+               pdf(file.i)
+               plot(seg_fit_j~x,pch = 20,type = "l", data = ds_plot,
+                    ylab = "ALE", xlab = expression(x[j]), lwd = 2)
+               lines(y ~ x, data = ds_plot,col = 2)
+               grid(10)
+               dev.off()
+            }
+         }
+         
+         return(K)
+         
+      }
+      
+      catch_error <- MEC_try_function(ale_j)
+      
+      ####
+      # catch_error <- try(MEC_try_function(ale_j),silent  = T)
+      # try_i <- 1
+      # 
+      # while(inherits(catch_error,"try-error")) {#why the fuck is this here
+      #    try_i <- try_i + 1
+      #    cat("This is error trial ", try_i, "\n" )
+      #    
+      #    catch_error <- try(MEC_try_function(ale_j), silent  = T)
+      #    
+      #    if(try_i > 1000){
+      #       cat("1000 trials reached, stopping")
+      #       break
+      #    }
+      # }
+      
+      ####
+      
+      MEC_j <- catch_error
+      MEC <- c(MEC,MEC_j)
+      
+   }
+#this goes across all models, gets used in calculation, run for each factor's ale_j
+   
   
-  catch_error <- try(MEC_try_function(ale_j),silent  = T)
-  try_i <- 1
-  
-  while(inherits(catch_error,"try-error")) {
-    try_i <- try_i + 1
-    cat("This is error trial ",try_i,"\n" )
-    
-    catch_error <- try(MEC_try_function(ale_j), silent  = T)
-  }
-  
-  
-  MEC_j <- catch_error
-  
-  
-  MEC <- c(MEC,MEC_j)
-  
-  V_j <- var(f_j_ale)
-  V <- c(V,V_j)
+   MEC_model <- sum(MEC*V/sum(V))
+   
+   return(MEC_model)
 }
 
 
 main <- function()
 {
-  cl <- makePSOCKcluster(detectCores())
-  registerDoParallel(cl)
-  
-  #model fitting params
-  trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3, allowParallel = T)
-  model_list <- c("lm","svmRadial")
-  
-  #make data
-  
-  
-  #train test split
-  ds <- raw_df
-  ds_train <- ds
-  ds_test <- ds_train
-  
-  #model formula
-  y_var <- "Y"
-  x_var <- names(ds)[!names(ds) %in% y_var]
-  model_formula <- formula(paste(y_var, " ~ " ,paste(x_var,collapse = " + ")))
-  
-  #other vars
-  MSE_MEC_prop_seq <- MSE_seq <- NF_seq <- IAS_seq <- MEC_model_seq <- train_model_list <- c()
-  
-  
-  for (model_i in model_list) {
-    tmp = fit_model(model_formula, model_i, ds_train, ds_test, x_var, y_var, trctrl)
-    # model = tmp[1]
-    # mse = tmp[2]
-    # y_hat_i = tmp[3]
-    #train_model_list <- c(train_model_list, list(tmp[1]))
-    
-    MSE_seq <- c(MSE_seq, tmp[2])
-    
-    NF <- sapply(x_var, function(x) feature_used(train_model, x, 500) )
-    NF_seq <- c(NF_seq, sum(NF))
-  
-    #doale
-    fit_ale(tmp[1], ds_train, ds_test, x_var, tmp[3])
-  
-    #do mec
-  
-  }
-  
-  stopCluster(cl)
-  registerDoSEQ()
+   cl <- makePSOCKcluster(detectCores())
+   registerDoParallel(cl)
+   
+   #model fitting params
+   trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3, allowParallel = T) # i think this does crossvalidation
+   model_list <- c("lm","svmRadial")
+   
+   env_setup(model_list)
+   
+   #make data
+   {
+      gen_corr_data <- function(corr_mat, f_sd, f_mu, num_obs){
+         d = diag(f_sd)
+         cov_mat = d %*% corr_mat %*% d
+         return(mvrnorm(n = num_obs, mu = f_mu, Sigma = cov_mat))
+      }
+      
+      corr_mat = matrix( c(1.0, 0.8, 0.2,
+                           0.8, 1.0, 0.3,
+                           0.2, 0.3, 1.0),
+                         nrow = 3)
+      
+      sd = c(2, 1, 0.5)
+      m = c(0, 0, 0)
+      num = 1000
+      
+      raw = gen_corr_data(corr_mat, sd, m, num)
+      
+      Y = 3*raw[,1] + 2*raw[,2]^3 + 1*raw[,3]
+      raw_df = data.frame(raw, Y)
+      
+   }
+   
+   
+   #train test split
+   ds <- raw_df
+   ds_train <- ds
+   ds_test <- ds_train
+   
+   #model formula
+   y_var <- "Y"
+   x_var <- names(ds)[!names(ds) %in% y_var]
+   model_formula <- formula(paste(y_var, " ~ " ,paste(x_var,collapse = " + ")))
+   
+   #other vars
+   MSE_MEC_prop_seq <- MSE_seq <- NF_seq <- IAS_seq <- MEC_model_seq <- train_model_list <- c()
+   
+   
+   for (model_i in model_list) {
+      
+      cat("Fitting ", model_i, "\n")
+      
+      train_model <- train(model_formula, data = ds_train, method = model_i,
+                           trControl = trctrl,
+                           # preProcess = c("center", "scale"),
+                           tuneLength = 10)
+      
+      y_hat_i <- predict(train_model, ds_test[,x_var])
+      y_true <- ds_test[,y_var]
+      
+      #plot(y_true~y_hat_i)
+      #summary(lm(y_true~y_hat_i))$adj
+      
+      mse = mean((ds_test[,"Y"] - y_hat_i)^2)
+      
+      NF <- sapply(x_var, function(x) feature_used(train_model, x, 500) )
+      num_feat_used = sum(NF)
+      
+   
+      NF_seq <- c(NF_seq, num_feat_used)
+
+      MSE_seq <- c(MSE_seq, mse)
+      
+      #doale
+      tmp_ale = fit_ale(train_model, x_var, ds_train, y_hat_i)
+      
+      IAS_seq <- c(IAS_seq, tmp_ale[[3]])
+      
+      #do mec
+      
+      tmp_mec = calc_mec(train_model, x_var, tmp_ale[[1]], 0.05, tmp_ale[[2]])
+      
+      MEC_model_seq <- c(MEC_model_seq, tmp_mec)
+      
+   }
+   
+   sum_df <- data.frame(model = model_list,  #check
+                        MEC = MEC_model_seq, #not
+                        IAS = round(IAS_seq,2), #check
+                        NF = NF_seq, #check
+                        MSE = MSE_seq, #check
+                        MSE_MEC_prop = MSE_seq * MEC_model_seq)#not
+   
+   stopCluster(cl)
+   registerDoSEQ()
+   
+   print(sum_df)
 }
 
+main()
 
