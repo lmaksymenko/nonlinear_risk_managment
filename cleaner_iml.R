@@ -94,7 +94,7 @@ fit_model <- function(formula, model, x_var, y_var, train, test, control)
                         trControl = control,
                         # preProcess = c("center", "scale"),
                         tuneLength = 10)
-   print('MOdel:')
+   print('Model:')
    print(class(train_model))
    
    y_hat_i <- predict(train_model, test[,x_var])
@@ -118,19 +118,15 @@ fit_model <- function(formula, model, x_var, y_var, train, test, control)
 
 fit_ale <- function(model, x_var, train, y_hat_i)
 {
-   print('doing ale')
    ale_Js <- c()
    var_Js <- c()
+   loess_Js <- c()
    
    f_0 <- mean(y_hat_i)
    f_ale_1st  <- f_0
    
    yhat <- function(X.model, newdata) as.numeric(predict(X.model, newdata, type = "raw"))#error here
    
-   print('before')
-   print(class(model))
-   yhat(model, train)
-   print('past')
    for (v in x_var) {
       
       print(class(train))
@@ -144,6 +140,7 @@ fit_ale <- function(model, x_var, train, y_hat_i)
       ale_Js <- c(ale_Js, ale_j)
       
       loess_j <- loess(ale_j$f.values ~ ale_j$x.values, span = 0.1)
+      loess_Js <- c(loess_Js, list(loess_j))
       
       f_j_ale <- predict(loess_j, train[,v]) # based on the ale, we compute the approximation, exists for each factor
       
@@ -169,7 +166,7 @@ fit_ale <- function(model, x_var, train, y_hat_i)
    IAS2 <- sum((y_hat_i - f_0)^2)
    IAS <- IAS1/IAS2
  
-   return(list(ale_Js, var_Js, IAS)) #return the ale_j plots, V_j
+   return(list(ale_Js, var_Js, IAS, loess_Js)) #return the ale_j plots, V_j
    #returning in this format flattens the lists
 }
 
@@ -181,7 +178,6 @@ calc_mec <- function(model, x_var,  ale_j, tol, V)#ale_j (the plot), tol is epsi
    
    for (v in x_var){
       MEC_try_function <- function(ale_j) {
-         #dumb index workaround...
          x <- ale_j$x.values
          y <- ale_j$f.values
          K <- 1
@@ -229,23 +225,21 @@ calc_mec <- function(model, x_var,  ale_j, tol, V)#ale_j (the plot), tol is epsi
          
       }
       
-      catch_error <- MEC_try_function(ale_j)
-      
       ####
-      # catch_error <- try(MEC_try_function(ale_j),silent  = T)
-      # try_i <- 1
-      # 
-      # while(inherits(catch_error,"try-error")) {#why the fuck is this here
-      #    try_i <- try_i + 1
-      #    cat("This is error trial ", try_i, "\n" )
-      #    
-      #    catch_error <- try(MEC_try_function(ale_j), silent  = T)
-      #    
-      #    if(try_i > 1000){
-      #       cat("1000 trials reached, stopping")
-      #       break
-      #    }
-      # }
+      catch_error <- try(MEC_try_function(ale_j),silent  = T)
+      try_i <- 1
+
+      while(inherits(catch_error,"try-error")) {#why the fuck is this here
+         try_i <- try_i + 1
+         cat("This is error trial ", try_i, "\n" )
+
+         catch_error <- try(MEC_try_function(ale_j), silent  = T)
+
+         if(try_i > 1000){
+            cat("1000 trials reached, stopping")
+            break
+         }
+      }
       
       ####
       
@@ -253,13 +247,46 @@ calc_mec <- function(model, x_var,  ale_j, tol, V)#ale_j (the plot), tol is epsi
       MEC <- c(MEC,MEC_j)
       
    }
-#this goes across all models, gets used in calculation, run for each factor's ale_j
-   
-  
+
    MEC_model <- sum(MEC*V/sum(V))
    
    return(MEC_model)
 }
+
+get_xj_slope <- function(loess_model, vec_xval){
+   
+   sapply(vec_xval, function(xval) return ((predict(loess_model, xval) 
+                                                   - predict(loess_model, xval - 0.0001))
+                                                  / (xval - (xval-0.0001))) )
+}
+
+
+backtest_hedging <- function(model, loess_model_list, data, x_var, cov_mat){
+   ##backtests the hedging for a single model
+   
+   #TESTING VARS
+   loess_model_list = tmp_ale[[4]]
+   data = ds
+   #
+   
+   
+   ###get the weights for each asset
+      #"Y" "X1" ... in this order
+         #vars = c("Y", x_var)
+   
+      #get the returns matrix
+         #ds[c("Y", x_var)] #indexing the returns
+   
+   #get beta matrix for X vars
+   betas = sapply(x_var, function(x) return (get_xj_slope(loess_model_list[[which(x == x_var)]], data[x])) )
+   
+   ###apply function to each row in the testing data
+  
+   
+   ###have a vector of daily returns
+      #calculate the evaluation metrics
+} 
+
 
 
 main <- function()
@@ -300,6 +327,8 @@ main <- function()
    
    #train test split
    ds <- raw_df
+   
+   #REDO
    ds_train <- ds
    ds_test <- ds_train
    
@@ -310,6 +339,8 @@ main <- function()
    
    #other vars
    MSE_MEC_prop_seq <- MSE_seq <- NF_seq <- IAS_seq <- MEC_model_seq <- train_model_list <- c()
+   
+   loess_model_seq <- c()
    
    
    for (model_i in model_list) {
@@ -328,25 +359,29 @@ main <- function()
       #summary(lm(y_true~y_hat_i))$adj
       
       mse = mean((ds_test[,"Y"] - y_hat_i)^2)
+      MSE_seq <- c(MSE_seq, mse)
       
       NF <- sapply(x_var, function(x) feature_used(train_model, x, 500) )
       num_feat_used = sum(NF)
-      
-   
       NF_seq <- c(NF_seq, num_feat_used)
 
-      MSE_seq <- c(MSE_seq, mse)
       
       #doale
       tmp_ale = fit_ale(train_model, x_var, ds_train, y_hat_i)
-      
       IAS_seq <- c(IAS_seq, tmp_ale[[3]])
       
+      ####test slope#####
+      #slopes work, now we need to do the hedgin part
+      cat("Slopes")
+      
+      cat(sapply(seq(-1,1,0.1), function(x) get_xj_slope(tmp_ale[[4]][[1]], x)))
+      
+      loess_model_seq <- c(loess_model_seq, list(tmp_ale[[4]]))
+      
+             
       #do mec
-      
-      tmp_mec = calc_mec(train_model, x_var, tmp_ale[[1]], 0.05, tmp_ale[[2]])
-      
-      MEC_model_seq <- c(MEC_model_seq, tmp_mec)
+      # tmp_mec = calc_mec(train_model, x_var, tmp_ale[[1]], 0.05, tmp_ale[[2]])
+      # MEC_model_seq <- c(MEC_model_seq, tmp_mec)
       
    }
    
@@ -361,6 +396,11 @@ main <- function()
    registerDoSEQ()
    
    print(sum_df)
+   
+   ###pricing
+   
+   
+   
 }
 
 main()
