@@ -1,5 +1,14 @@
 #Imports
 {
+   #clear env
+   rm(list = ls())
+   
+   #graph output dir
+   setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+   output.dir <- getwd()
+   fig.dir <- paste(output.dir,"/Figures/",sep = "")
+   
+   #packages
    defaultW <- getOption("warn") 
    options(warn = -1) 
    
@@ -24,17 +33,14 @@
    
    options(warn = defaultW)
    
-   #clear env
-   rm(list = ls())
-   
-   #graph output dir
-   setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
-   output.dir <- getwd()
-   fig.dir <- paste(output.dir,"/Figures/",sep = "")
+   #imports
+   source("data_generation.R")
 }
 
 
-env_setup <- function(model_list)
+
+
+clear_figures <- function(model_list)
 {
    #make dirs if needed
    for(m in model_list){
@@ -45,18 +51,6 @@ env_setup <- function(model_list)
          do.call(file.remove, list(list.files(wd, full.names = TRUE)))
       }
    }
-   
-}
-
-#Psudocode
-#define models to be used
-#train model
-### model training params
-#
-#
-
-gen_data <- function()
-{
    
 }
 
@@ -137,7 +131,7 @@ fit_ale <- function(model, x_var, train, y_hat_i)
       ale_j <- ALEPlot(train, model, pred.fun = yhat, J = j, #this is where the error is 
                        K = 10^2, NA.plot = TRUE)#K will need to be changed later
       
-      ale_Js <- c(ale_Js, ale_j)
+      ale_Js <- c(ale_Js, list(ale_j))
       
       loess_j <- loess(ale_j$f.values ~ ale_j$x.values, span = 0.1)
       loess_Js <- c(loess_Js, list(loess_j))
@@ -171,12 +165,13 @@ fit_ale <- function(model, x_var, train, y_hat_i)
 }
 
 
-calc_mec <- function(model, x_var,  ale_j, tol, V)#ale_j (the plot), tol is epsilon, 
+calc_mec <- function(model, x_var, ale_Js, tol, V)#ale_j (the plot), tol is epsilon, 
 {
-   epsilon <- 0.05 # set tolerance
+   epsilon <- tol # set tolerance
    MEC <- c()
    
    for (v in x_var){
+      ale_j = ale_Js[[which(v == x_var)]]
       MEC_try_function <- function(ale_j) {
          x <- ale_j$x.values
          y <- ale_j$f.values
@@ -229,7 +224,7 @@ calc_mec <- function(model, x_var,  ale_j, tol, V)#ale_j (the plot), tol is epsi
       catch_error <- try(MEC_try_function(ale_j),silent  = T)
       try_i <- 1
 
-      while(inherits(catch_error,"try-error")) {#why the fuck is this here
+      while(inherits(catch_error,"try-error")) {#why is this here
          try_i <- try_i + 1
          cat("This is error trial ", try_i, "\n" )
 
@@ -295,11 +290,14 @@ main <- function()
    registerDoParallel(cl)
    
    #model fitting params
-   trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3, allowParallel = T) # i think this does crossvalidation
    model_list <- c("lm","svmRadial")
+   trctrl <- trainControl(method = "repeatedcv", 
+                          number = 10, 
+                          repeats = 3, 
+                          allowParallel = T) # i think this does cross validation
+   clear_figures(model_list)
    
-   env_setup(model_list)
-   
+   ##################
    #make data
    {
       gen_corr_data <- function(corr_mat, f_sd, f_mu, num_obs){
@@ -319,14 +317,16 @@ main <- function()
       
       raw = gen_corr_data(corr_mat, sd, m, num)
       
-      Y = 3*raw[,1] + 2*raw[,2]^3 + 1*raw[,3]
+      Y = 3*raw[,1] + 2*raw[,2] + 1*raw[,3]
       raw_df = data.frame(raw, Y)
       
    }
    
    
    #train test split
-   ds <- raw_df
+   ds <- gen_manual_data()
+
+   ################
    
    #REDO
    ds_train <- ds
@@ -337,9 +337,10 @@ main <- function()
    x_var <- names(ds)[!names(ds) %in% y_var]
    model_formula <- formula(paste(y_var, " ~ " ,paste(x_var,collapse = " + ")))
    
-   #other vars
+   #info vars
    MSE_MEC_prop_seq <- MSE_seq <- NF_seq <- IAS_seq <- MEC_model_seq <- train_model_list <- c()
    
+   #beta extraction var
    loess_model_seq <- c()
    
    
@@ -347,7 +348,10 @@ main <- function()
       
       cat("Fitting ", model_i, "\n")
       
-      train_model <- train(model_formula, data = ds_train, method = model_i,
+      #### TRAIN MODEL ####
+      train_model <- train(model_formula, 
+                           data = ds_train, 
+                           method = model_i,
                            trControl = trctrl,
                            # preProcess = c("center", "scale"),
                            tuneLength = 10)
@@ -355,49 +359,42 @@ main <- function()
       y_hat_i <- predict(train_model, ds_test[,x_var])
       y_true <- ds_test[,y_var]
       
-      #plot(y_true~y_hat_i)
-      #summary(lm(y_true~y_hat_i))$adj
-      
       mse = mean((ds_test[,"Y"] - y_hat_i)^2)
       MSE_seq <- c(MSE_seq, mse)
+      ####
+      
       
       NF <- sapply(x_var, function(x) feature_used(train_model, x, 500) )
-      num_feat_used = sum(NF)
-      NF_seq <- c(NF_seq, num_feat_used)
+      NF_seq <- c(NF_seq, sum(NF))
 
       
-      #doale
+      #### ALE
       tmp_ale = fit_ale(train_model, x_var, ds_train, y_hat_i)
       IAS_seq <- c(IAS_seq, tmp_ale[[3]])
-      
-      ####test slope#####
-      #slopes work, now we need to do the hedgin part
-      cat("Slopes")
-      
-      cat(sapply(seq(-1,1,0.1), function(x) get_xj_slope(tmp_ale[[4]][[1]], x)))
-      
       loess_model_seq <- c(loess_model_seq, list(tmp_ale[[4]]))
       
              
-      #do mec
-      # tmp_mec = calc_mec(train_model, x_var, tmp_ale[[1]], 0.05, tmp_ale[[2]])
-      # MEC_model_seq <- c(MEC_model_seq, tmp_mec)
+      #### MEC
+      tmp_mec = calc_mec(train_model, x_var, tmp_ale[[1]], 0.05, tmp_ale[[2]])
+      MEC_model_seq <- c(MEC_model_seq, tmp_mec)
       
    }
-   
-   sum_df <- data.frame(model = model_list,  #check
-                        MEC = MEC_model_seq, #not
-                        IAS = round(IAS_seq,2), #check
-                        NF = NF_seq, #check
-                        MSE = MSE_seq, #check
-                        MSE_MEC_prop = MSE_seq * MEC_model_seq)#not
-   
    stopCluster(cl)
    registerDoSEQ()
    
+   #### SUMMARY MODELS ####
+   sum_df <- data.frame(model = model_list,
+                        MEC = MEC_model_seq,
+                        IAS = round(IAS_seq,2),
+                        NF = NF_seq,
+                        MSE = MSE_seq,
+                        MSE_MEC_prop = MSE_seq * MEC_model_seq)
    print(sum_df)
+   ####
    
-   ###pricing
+   #### HEDGING ####
+   
+   ####
    
    
    
