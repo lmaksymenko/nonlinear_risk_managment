@@ -256,30 +256,17 @@ get_xj_slope <- function(loess_model, vec_xval){
 }
 
 
-backtest_hedging <- function(model, loess_model_list, data, x_var, cov_mat){
-   ##backtests the hedging for a single model
-   
-   #TESTING VARS
-   loess_model_list = tmp_ale[[4]]
-   data = ds
-   #
-   
-   
-   ###get the weights for each asset
-      #"Y" "X1" ... in this order
-         #vars = c("Y", x_var)
-   
-      #get the returns matrix
-         #ds[c("Y", x_var)] #indexing the returns
+iid_backtest_returns <- function(model, loess_model_list, data, x_var){
+   ##iid backtest the hedging for a single model
    
    #get beta matrix for X vars
+
    betas = sapply(x_var, function(x) return (get_xj_slope(loess_model_list[[which(x == x_var)]], data[x])) )
+   betas = t(apply(betas, 1, function(x) return(x/sum(x)))) #normalize
+   betas = cbind(-betas, Y = rep(1,nrow(betas)))
    
-   ###apply function to each row in the testing data
-  
-   
-   ###have a vector of daily returns
-      #calculate the evaluation metrics
+   returns = as.vector(t(apply(betas * data, 1, sum)))[1:10]
+   return(returns)
 } 
 
 
@@ -297,40 +284,12 @@ main <- function()
                           allowParallel = T) # i think this does cross validation
    clear_figures(model_list)
    
-   ##################
-   #make data
-   {
-      gen_corr_data <- function(corr_mat, f_sd, f_mu, num_obs){
-         d = diag(f_sd)
-         cov_mat = d %*% corr_mat %*% d
-         return(mvrnorm(n = num_obs, mu = f_mu, Sigma = cov_mat))
-      }
-      
-      corr_mat = matrix( c(1.0, 0.8, 0.2,
-                           0.8, 1.0, 0.3,
-                           0.2, 0.3, 1.0),
-                         nrow = 3)
-      
-      sd = c(2, 1, 0.5)
-      m = c(0, 0, 0)
-      num = 1000
-      
-      raw = gen_corr_data(corr_mat, sd, m, num)
-      
-      Y = 3*raw[,1] + 2*raw[,2] + 1*raw[,3]
-      raw_df = data.frame(raw, Y)
-      
-   }
-   
-   
-   #train test split
-   ds <- gen_manual_data()
 
-   ################
-   
-   #REDO
-   ds_train <- ds
-   ds_test <- ds_train
+   #data and train test split for fixed window
+   train_size = 0.5
+   ds <- gen_calibrated_data()
+   ds_train <- ds[0: (nrow(ds) * 0.5),]
+   ds_test <- ds[(nrow(ds) * 0.5):nrow(ds),]
    
    #model formula
    y_var <- "Y"
@@ -356,7 +315,7 @@ main <- function()
                            # preProcess = c("center", "scale"),
                            tuneLength = 10)
       
-      y_hat_i <- predict(train_model, ds_test[,x_var])
+      y_hat_i <- predict(train_model, ds_test[, x_var])
       y_true <- ds_test[,y_var]
       
       mse = mean((ds_test[,"Y"] - y_hat_i)^2)
@@ -393,10 +352,10 @@ main <- function()
    ####
    
    #### HEDGING ####
-   
+   for (model_i in model_list) {
+      iid_backtest_returns(model_i, loess_model_seq[[which(model_i == model_list)]], ds_test, x_var)
+   }
    ####
-   
-   
    
 }
 

@@ -41,18 +41,19 @@ gen_calibrated_data <- function(){
   data = read.csv('data/ff_factors.csv', header = TRUE)
   colnames(data) = c(1:length(data))
   
-  
   cov_mat = cov(data)
   means = unlist(lapply(data, mean))
   #sds = lapply(data, sd)
   num = 1000
   
   raw = mvrnorm(n = num, mu = means, Sigma = cov_mat)
-  Y = 3*raw[,1] + 2*raw[,2]^3 + 1*raw[,3] + 0.5*raw[,4]
+  Y = 0.25*raw[,1] + 0.25*raw[,2]^2 + 0.25*raw[,3] + 0.25*raw[,4]
   
   raw_df = data.frame(raw, Y)
   
   return(raw_df)
 }
 
+
+gen_calibrated_data()
 
