@@ -266,4 +266,22 @@ registerDoSEQ()
 sum_df <- data.frame(model = model_list,  MEC = MEC_model_seq, IAS = round(IAS_seq,2),NF = NF_seq)
 xtable(sum_df)
 
+# Creating dataset
+# creating firs column
+x <- c(5, 6, 7, 5, 6, 9)
 
+# creating second column
+y <- c(6, 4, 3, 4, 2, 6)
+
+# creating third column
+z <- c(1, 2, 3, 7, 8, 9)
+
+# creating dataframe
+df <- data.frame(A = x, B = y, C = z)
+
+t(apply(df, 1, function(x) return(x/sum(x))))
+
+ret = t(t(apply(df, 1, sum)))
+
+t(t(ret))
+      

@@ -262,15 +262,19 @@ iid_backtest_returns <- function(model, loess_model_list, data, x_var){
    #get beta matrix for X vars
 
    betas = sapply(x_var, function(x) return (get_xj_slope(loess_model_list[[which(x == x_var)]], data[x])) )
-   betas = t(apply(betas, 1, function(x) return(x/sum(x)))) #normalize
+   #don't normalize betas yet
+   #betas = t(apply(betas, 1, function(x) return(x/sum(x)))) #normalize so that they add to 1
    betas = cbind(-betas, Y = rep(1,nrow(betas)))
    
    returns = as.vector(t(apply(betas * data, 1, sum)))
    
    ###
    g = data.frame(data[["Y"]],returns)
-   sd(g$data...Y...)
-   sd(g$returns, na.rm = TRUE)
+   
+   print(sd(g$data...Y...))
+   #standard deviation of the returns
+   print(sd(g$returns, na.rm = TRUE))
+   
    #nrow(data)
    
    
@@ -290,7 +294,7 @@ main <- function()
    registerDoParallel(cl)
    
    #model fitting params
-   model_list <- c("lm","svmRadial")
+   model_list <- c("lm", "svmRadial")
    trctrl <- trainControl(method = "repeatedcv", 
                           number = 10, 
                           repeats = 3, 
@@ -345,7 +349,8 @@ main <- function()
       IAS_seq <- c(IAS_seq, tmp_ale[[3]])
       loess_model_seq <- c(loess_model_seq, list(tmp_ale[[4]]))
       
-             
+     
+      ## change to 90% complexity
       #### MEC
       tmp_mec = calc_mec(train_model, x_var, tmp_ale[[1]], 0.05, tmp_ale[[2]])
       MEC_model_seq <- c(MEC_model_seq, tmp_mec)

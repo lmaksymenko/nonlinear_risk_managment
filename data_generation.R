@@ -35,6 +35,13 @@ gen_manual_data <- function(){
 
 ### GENERATING CALIBRATED DATA ###
 
+# skip risk free rate
+# fix data sampling
+#think about nonlinear structure - add more nonlinearity (squared, higher orders)
+# what are the correlations between higher orders (x1^2 and so on)
+# plot data to view overall complexity (gg plot)
+
+
 #using https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html
 
 gen_calibrated_data <- function(){
@@ -47,7 +54,9 @@ gen_calibrated_data <- function(){
   num = 1000
   
   raw = mvrnorm(n = num, mu = means, Sigma = cov_mat)
-  Y = 0.25*raw[,1] + 0.25*raw[,2]^2 + 0.25*raw[,3] + 0.25*raw[,4]
+  # we need to add noise
+  eps = rnorm(n = num, sd = 0.1)
+  Y = 0.25*raw[,1] + 0.25*raw[,2]^2 + 0.25*raw[,3] + 0.25*raw[,4] + eps
   
   raw_df = data.frame(raw, Y)
   
