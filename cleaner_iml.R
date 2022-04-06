@@ -35,10 +35,10 @@
    
    #imports
    source("data_generation.R")
+   #source("ale.R")
+   #source("mec.R")
+   #source("backtesting.R")
 }
-
-
-
 
 clear_figures <- function(model_list)
 {
@@ -128,8 +128,8 @@ fit_ale <- function(model, x_var, train, y_hat_i)
       
       j <- which(v == x_var)
       
-      ale_j <- ALEPlot(train, model, pred.fun = yhat, J = j, #this is where the error is 
-                       K = 10^2, NA.plot = TRUE)#K will need to be changed later
+      ale_j <- ALEPlot(train, model, pred.fun = yhat, J = j,
+                       K = 10^2, NA.plot = TRUE)#K will need to be changed later?
       
       ale_Js <- c(ale_Js, list(ale_j))
       
@@ -157,6 +157,7 @@ fit_ale <- function(model, x_var, train, y_hat_i)
    
    # compute IAS
    IAS1 <- sum((y_hat_i - f_ale_1st)^2)
+   sum((as.numeric(y_hat_i) - f_ale_1st)^2)
    IAS2 <- sum((y_hat_i - f_0)^2)
    IAS <- IAS1/IAS2
  
@@ -308,13 +309,17 @@ main <- function()
    ds_train <- ds[0: (nrow(ds) * 0.5),]
    ds_test <- ds[(nrow(ds) * 0.5):nrow(ds),]
    
+   write.csv(ds, "last_data.csv")
+   
    #model formula
    y_var <- "Y"
    x_var <- names(ds)[!names(ds) %in% y_var]
    model_formula <- formula(paste(y_var, " ~ " ,paste(x_var,collapse = " + ")))
    
    #info vars
-   MSE_MEC_prop_seq <- MSE_seq <- NF_seq <- IAS_seq <- MEC_model_seq <- train_model_list <- c()
+   NF_seq <- IAS_seq <- MEC_model_seq <- train_model_list <- c()
+   
+   MSE_MEC_prop_seq <- MSE_test_seq <-MSE_train_seq <- c()
    
    #beta extraction var
    loess_model_seq <- c()
@@ -332,11 +337,15 @@ main <- function()
                            # preProcess = c("center", "scale"),
                            tuneLength = 10)
       
-      y_hat_i <- predict(train_model, ds_test[, x_var])
+      y_hat_train <- predict(train_model, ds_train[, x_var])
+      y_hat_test <- predict(train_model, ds_test[, x_var])
       y_true <- ds_test[,y_var]
       
-      mse = mean((ds_test[,"Y"] - y_hat_i)^2)
-      MSE_seq <- c(MSE_seq, mse)
+      mse = mean((ds_train[,"Y"] - y_hat_train)^2)
+      MSE_train_seq <- c(MSE_train_seq, mse)
+      
+      mse = mean((ds_test[,"Y"] - y_hat_test)^2)
+      MSE_test_seq <- c(MSE_test_seq, mse)
       ####
       
       
@@ -345,7 +354,7 @@ main <- function()
 
       
       #### ALE
-      tmp_ale = fit_ale(train_model, x_var, ds_train, y_hat_i)
+      tmp_ale = fit_ale(train_model, x_var, ds_train, y_hat_train)
       IAS_seq <- c(IAS_seq, tmp_ale[[3]])
       loess_model_seq <- c(loess_model_seq, list(tmp_ale[[4]]))
       
@@ -364,13 +373,15 @@ main <- function()
                         MEC = MEC_model_seq,
                         IAS = round(IAS_seq,2),
                         NF = NF_seq,
-                        MSE = MSE_seq,
-                        MSE_MEC_prop = MSE_seq * MEC_model_seq)
+                        MSE_Train = MSE_train_seq,
+                        MSE_Test = MSE_test_seq,
+                        MSE_Test_MEC_prop = MSE_test_seq * MEC_model_seq)
    print(sum_df)
    ####
    
    #### HEDGING ####
    for (model_i in model_list) {
+      cat(model_i, "backtest: ")
       iid_backtest_returns(model_i, loess_model_seq[[which(model_i == model_list)]], ds_test, x_var)
    }
    ####
