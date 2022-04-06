@@ -265,7 +265,20 @@ iid_backtest_returns <- function(model, loess_model_list, data, x_var){
    betas = t(apply(betas, 1, function(x) return(x/sum(x)))) #normalize
    betas = cbind(-betas, Y = rep(1,nrow(betas)))
    
-   returns = as.vector(t(apply(betas * data, 1, sum)))[1:10]
+   returns = as.vector(t(apply(betas * data, 1, sum)))
+   
+   ###
+   g = data.frame(data[["Y"]],returns)
+   sd(g$data...Y...)
+   sd(g$returns, na.rm = TRUE)
+   #nrow(data)
+   
+   
+   #(get_xj_slope(loess_model_list[[1]], data["X1"]))
+   
+   #sapply(X = data[["X1"]], FUN = function(xval) return (1 ))
+   
+   ###
    return(returns)
 } 
 
