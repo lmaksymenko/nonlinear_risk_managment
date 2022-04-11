@@ -166,8 +166,14 @@ fit_ale <- function(model, x_var, train, y_hat_i)
 }
 
 
-calc_mec <- function(model, x_var, ale_Js, tol, V)#ale_j (the plot), tol is epsilon, 
+calc_mec <- function(model, x_var, ale_Js, tol, var_Js)#ale_j (the plot), tol is epsilon, 
 {
+   #model - current trained model
+   #x_var - list of x variables in model
+   #ale_Js - list of ALEPlot objects, one for each x_var
+   #tol - peicewise regression error tolerance in %
+   #var_Js - variance of the loess predicted f_j_ale
+   
    epsilon <- tol # set tolerance
    MEC <- c()
    
@@ -244,7 +250,7 @@ calc_mec <- function(model, x_var, ale_Js, tol, V)#ale_j (the plot), tol is epsi
       
    }
 
-   MEC_model <- sum(MEC*V/sum(V))
+   MEC_model <- sum(MEC*var_Js/sum(var_Js))
    
    return(MEC_model)
 }
@@ -261,29 +267,20 @@ iid_backtest_returns <- function(model, loess_model_list, data, x_var){
    ##iid backtest the hedging for a single model
    
    #get beta matrix for X vars
-
    betas = sapply(x_var, function(x) return (get_xj_slope(loess_model_list[[which(x == x_var)]], data[x])) )
+   
    #don't normalize betas yet
    #betas = t(apply(betas, 1, function(x) return(x/sum(x)))) #normalize so that they add to 1
+   
    betas = cbind(-betas, Y = rep(1,nrow(betas)))
    
    returns = as.vector(t(apply(betas * data, 1, sum)))
    
-   ###
    g = data.frame(data[["Y"]],returns)
-   
-   print(sd(g$data...Y...))
    #standard deviation of the returns
+   print(sd(g$data...Y...))
    print(sd(g$returns, na.rm = TRUE))
-   
-   #nrow(data)
-   
-   
-   #(get_xj_slope(loess_model_list[[1]], data["X1"]))
-   
-   #sapply(X = data[["X1"]], FUN = function(xval) return (1 ))
-   
-   ###
+
    return(returns)
 } 
 
@@ -381,7 +378,7 @@ main <- function()
    
    #### HEDGING ####
    for (model_i in model_list) {
-      cat(model_i, "backtest: ")
+      cat(model_i, "backtest: \n")
       iid_backtest_returns(model_i, loess_model_seq[[which(model_i == model_list)]], ds_test, x_var)
    }
    ####
