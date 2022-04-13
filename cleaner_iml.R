@@ -30,6 +30,8 @@
    library(parallel)
    library(plotly)
    library(numDeriv)
+   library(logging)
+
    
    options(warn = defaultW)
    
@@ -110,7 +112,7 @@ fit_model <- function(formula, model, x_var, y_var, train, test, control)
 #return the ale values (ig thats all we want)
 #
 
-fit_ale <- function(model, x_var, train, y_hat_i)
+fit_ale <- function(model, x_var, train, y_hat_i, plotting)
 {
    ale_Js <- c()
    var_Js <- c()
@@ -122,9 +124,6 @@ fit_ale <- function(model, x_var, train, y_hat_i)
    yhat <- function(X.model, newdata) as.numeric(predict(X.model, newdata, type = "raw"))#error here
    
    for (v in x_var) {
-      
-      print(class(train))
-      print(class(v))
       
       j <- which(v == x_var)
       
@@ -143,7 +142,7 @@ fit_ale <- function(model, x_var, train, y_hat_i)
       
       var_Js <- c(var_Js, var(f_j_ale))
       
-      {
+      if(plotting){
          file.i <- paste0(fig.dir, model,"/ALE","_",j,".pdf")
          pdf(file.i)
          plot(ale_j$f.values~ale_j$x.values,
@@ -166,7 +165,7 @@ fit_ale <- function(model, x_var, train, y_hat_i)
 }
 
 
-calc_mec <- function(model, x_var, ale_Js, tol, var_Js)#ale_j (the plot), tol is epsilon, 
+calc_mec <- function(model, x_var, ale_Js, tol, var_Js, plotting)#ale_j (the plot), tol is epsilon, 
 {
    #model - current trained model
    #x_var - list of x variables in model
@@ -191,7 +190,7 @@ calc_mec <- function(model, x_var, ale_Js, tol, var_Js)#ale_j (the plot), tol is
          ds_plot <- data.frame(seg_fit_j,y,x)
          ds_plot <- ds_plot[order(ds_plot$x),]
          
-         {
+         if(plotting){
             j <- which(v == x_var)
             file.i <- paste0(fig.dir, model,"/MEC","_",j,".pdf")
             pdf(file.i)
@@ -213,7 +212,7 @@ calc_mec <- function(model, x_var, ale_Js, tol, var_Js)#ale_j (the plot), tol is
             ds_plot <- data.frame(seg_fit_j,y,x)
             ds_plot <- ds_plot[order(ds_plot$x),]
             
-            {
+            if(plotting){
                pdf(file.i)
                plot(seg_fit_j~x,pch = 20,type = "l", data = ds_plot,
                     ylab = "ALE", xlab = expression(x[j]), lwd = 2)
@@ -237,7 +236,7 @@ calc_mec <- function(model, x_var, ale_Js, tol, var_Js)#ale_j (the plot), tol is
 
          catch_error <- try(MEC_try_function(ale_j), silent  = T)
 
-         if(try_i > 1000){
+         if(try_i > 50){
             cat("1000 trials reached, stopping")
             break
          }
@@ -277,36 +276,38 @@ iid_backtest_returns <- function(model, loess_model_list, data, x_var){
    returns = as.vector(t(apply(betas * data, 1, sum)))
    
    g = data.frame(data[["Y"]],returns)
+   
    #standard deviation of the returns
-   print(sd(g$data...Y...))
-   print(sd(g$returns, na.rm = TRUE))
+   base = (sd(g$data...Y...))
+   hedged = (sd(g$returns, na.rm = TRUE))
 
-   return(returns)
+   return(c(base,hedged))
 } 
 
-
-
-main <- function()
+iml <- function()
 {
    cl <- makePSOCKcluster(detectCores())
    registerDoParallel(cl)
    
-   #model fitting params
+   
+   #### CONFIGS ####
    model_list <- c("lm", "svmRadial")
-   trctrl <- trainControl(method = "repeatedcv", 
+   TR_CTRL <- trainControl(method = "repeatedcv", #model fitting params
                           number = 10, 
                           repeats = 3, 
                           allowParallel = T) # i think this does cross validation
+   
+   #data and train test split for fixed window
+   TRAIN_SIZE = 0.5
+   PLOTTING = FALSE
+   ##################
    clear_figures(model_list)
    
-
-   #data and train test split for fixed window
-   train_size = 0.5
    ds <- gen_calibrated_data()
-   ds_train <- ds[0: (nrow(ds) * 0.5),]
-   ds_test <- ds[(nrow(ds) * 0.5):nrow(ds),]
+   train <- ds[0: (nrow(ds) * TRAIN_SIZE),]
+   test <- ds[(nrow(ds) * TRAIN_SIZE):nrow(ds),]
    
-   write.csv(ds, "last_data.csv")
+   #write.csv(ds, "last_data.csv")
    
    #model formula
    y_var <- "Y"
@@ -328,20 +329,20 @@ main <- function()
       
       #### TRAIN MODEL ####
       train_model <- train(model_formula, 
-                           data = ds_train, 
+                           data = train, 
                            method = model_i,
-                           trControl = trctrl,
+                           trControl = TR_CTRL,
                            # preProcess = c("center", "scale"),
                            tuneLength = 10)
       
-      y_hat_train <- predict(train_model, ds_train[, x_var])
-      y_hat_test <- predict(train_model, ds_test[, x_var])
-      y_true <- ds_test[,y_var]
+      y_hat_train <- predict(train_model, train[, x_var])
+      y_hat_test <- predict(train_model, test[, x_var])
+      y_true <- test[,y_var]
       
-      mse = mean((ds_train[,"Y"] - y_hat_train)^2)
+      mse = mean((train[,"Y"] - y_hat_train)^2)
       MSE_train_seq <- c(MSE_train_seq, mse)
       
-      mse = mean((ds_test[,"Y"] - y_hat_test)^2)
+      mse = mean((test[,"Y"] - y_hat_test)^2)
       MSE_test_seq <- c(MSE_test_seq, mse)
       ####
       
@@ -351,19 +352,30 @@ main <- function()
 
       
       #### ALE
-      tmp_ale = fit_ale(train_model, x_var, ds_train, y_hat_train)
+      tmp_ale = fit_ale(train_model, x_var, train, y_hat_train, PLOTTING)
       IAS_seq <- c(IAS_seq, tmp_ale[[3]])
       loess_model_seq <- c(loess_model_seq, list(tmp_ale[[4]]))
       
      
-      ## change to 90% complexity
       #### MEC
-      tmp_mec = calc_mec(train_model, x_var, tmp_ale[[1]], 0.05, tmp_ale[[2]])
+      tmp_mec = calc_mec(train_model, x_var, tmp_ale[[1]], 0.05, tmp_ale[[2]], PLOTTING) ## change to 90% complexity
       MEC_model_seq <- c(MEC_model_seq, tmp_mec)
       
    }
    stopCluster(cl)
    registerDoSEQ()
+   
+   base_ret_seq <- c()
+   hedge_ret_seq <- c()
+   
+   #### HEDGING TEST ####
+   for (model_i in model_list) {
+      cat(model_i, "backtest: \n")
+      tmp = iid_backtest_returns(model_i, loess_model_seq[[which(model_i == model_list)]], test, x_var)
+      base_ret_seq = c(base_ret_seq, tmp[1])
+      hedge_ret_seq = c(hedge_ret_seq, tmp[2])
+   }
+   ####
    
    #### SUMMARY MODELS ####
    sum_df <- data.frame(model = model_list,
@@ -372,18 +384,38 @@ main <- function()
                         NF = NF_seq,
                         MSE_Train = MSE_train_seq,
                         MSE_Test = MSE_test_seq,
-                        MSE_Test_MEC_prop = MSE_test_seq * MEC_model_seq)
-   print(sum_df)
-   ####
+                        MSE_Test_MEC_prop = MSE_test_seq * MEC_model_seq,
+                        Base_Ret = base_ret_seq,
+                        Hedge_Ret = hedge_ret_seq)
    
-   #### HEDGING ####
-   for (model_i in model_list) {
-      cat(model_i, "backtest: \n")
-      iid_backtest_returns(model_i, loess_model_seq[[which(model_i == model_list)]], ds_test, x_var)
+   return(sum_df)
+}
+# 
+# x = iml()
+# 
+# v = t(unlist(x))
+# 
+# 
+# write.table(v ,"test.csv")
+# write.table(v ,"test.csv", append = TRUE, col.names = FALSE)
+
+dist_test <- function(){
+   NUM_SIMS = 500
+   
+   #open file
+   
+   #first wirte with colnames
+   cat("Trial: ", 1, "\n")
+   res = t(unlist(iml()))
+   write.table(res ,"test.csv")
+   
+   #the rest
+   for(i in 2:NUM_SIMS){
+      cat("Trial: ", i, "\n")
+      res = t(unlist(iml()))
+      write.table(res ,"test.csv", append = TRUE, col.names = FALSE)
+      
    }
-   ####
-   
 }
 
-main()
-
+dist_test()

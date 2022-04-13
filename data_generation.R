@@ -65,13 +65,12 @@ gen_calibrated_data <- function(){
   
   # we need to add noise
   eps = rnorm(n = num, sd = 0.001)
-  Y = 0.25*raw[,1] + 0.25*raw[,2] + 0.25*raw[,3] + 0.25*raw[,4] + eps
-  
+  #Y = 0.25*raw[,1] + 0.25*raw[,2] + 0.25*raw[,3] + eps
+  Y = 0.25*raw[,1]^3 + 0.25*raw[,2]^3 + 0.25*raw[,3]^3 + eps
   raw_df = data.frame(raw, Y)
   
   return(raw_df)
 }
 
 
-gen_calibrated_data()
-
+pairs(gen_calibrated_data())
