@@ -204,7 +204,7 @@ calc_mec <- function(model, x_var, ale_Js, tol, var_Js, plotting)#ale_j (the plo
          #why does this need a try catch??
          while(Rsq_j < 1 - epsilon) {
             cat("This is ",K,"\n")
-            seg_j <- segmented(lm_j, seg.Z = ~ x, npsi = K)
+            seg_j <- segmented(lm_j, seg.Z = ~ x, npsi = K)#this could potentially be rewritten, there is a control for segmented that allows us to specify tol
             seg_fit_j <- fitted(seg_j)
             Rsq_j <- summary(lm(y~seg_fit_j))$adj
             K <- K + 1
@@ -227,17 +227,18 @@ calc_mec <- function(model, x_var, ale_Js, tol, var_Js, plotting)#ale_j (the plo
       }
       
       ####
-      catch_error <- try(MEC_try_function(ale_j),silent  = T)
+      catch_error <- try(MEC_try_function(ale_j),silent  = F)
       try_i <- 1
 
       while(inherits(catch_error,"try-error")) {#why is this here
          try_i <- try_i + 1
          cat("This is error trial ", try_i, "\n" )
 
-         catch_error <- try(MEC_try_function(ale_j), silent  = T)
+         catch_error <- try(MEC_try_function(ale_j), silent  = F)
 
-         if(try_i > 50){
-            cat("1000 trials reached, stopping")
+         if(try_i > 5){
+            cat("5 trials reached, stopping")
+            catch_error <- length(x_var)
             break
          }
       }
@@ -304,10 +305,11 @@ iml <- function()
    clear_figures(model_list)
    
    ds <- gen_calibrated_data()
+   #ds <- read.csv("last_data.csv")
    train <- ds[0: (nrow(ds) * TRAIN_SIZE),]
    test <- ds[(nrow(ds) * TRAIN_SIZE):nrow(ds),]
    
-   #write.csv(ds, "last_data.csv")
+   #write.csv(ds, "last_data_debug.csv")
    
    #model formula
    y_var <- "Y"
@@ -370,7 +372,7 @@ iml <- function()
    
    #### HEDGING TEST ####
    for (model_i in model_list) {
-      cat(model_i, "backtest: \n")
+      cat(model_i, "backtest \n")
       tmp = iid_backtest_returns(model_i, loess_model_seq[[which(model_i == model_list)]], test, x_var)
       base_ret_seq = c(base_ret_seq, tmp[1])
       hedge_ret_seq = c(hedge_ret_seq, tmp[2])
@@ -392,7 +394,7 @@ iml <- function()
 }
 # 
 # x = iml()
-# 
+# a
 # v = t(unlist(x))
 # 
 # 
@@ -402,20 +404,19 @@ iml <- function()
 dist_test <- function(){
    NUM_SIMS = 500
    
-   #open file
-   
    #first wirte with colnames
    cat("Trial: ", 1, "\n")
    res = t(unlist(iml()))
-   write.table(res ,"test.csv")
+   write.table(res ,"test.csv", row.names = FALSE)
    
    #the rest
    for(i in 2:NUM_SIMS){
       cat("Trial: ", i, "\n")
       res = t(unlist(iml()))
-      write.table(res ,"test.csv", append = TRUE, col.names = FALSE)
+      write.table(res ,"test.csv", append = TRUE, row.names = FALSE, col.names = FALSE)
       
    }
 }
 
 dist_test()
+#iml()
