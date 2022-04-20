@@ -1,4 +1,8 @@
 #Imports
+
+library(profvis)
+
+profvis({
 {
    #clear env
    rm(list = ls())
@@ -6,7 +10,7 @@
    #graph output dir
    setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
    output.dir <- getwd()
-   fig.dir <- paste(output.dir,"/Figures/",sep = "")
+   fig.dir <- paste(output.dir,"/Figures_Profiling/",sep = "")
    
    #packages
    defaultW <- getOption("warn") 
@@ -74,7 +78,7 @@ feature_used <- function(pred, feature, sample_size)
    dat2$.outcome <- NULL
    prediction2 = predict(pred,dat2)
    
-   plot(prediction1~prediction2)
+   #plot(prediction1~prediction2)
    
    if (any(( prediction1 - prediction2) != 0)) 
       return(TRUE)
@@ -304,8 +308,8 @@ iml <- function()
    ##################
    clear_figures(model_list)
    
-   ds <- gen_calibrated_data()
-   #ds <- read.csv("last_data.csv")
+   #ds <- gen_calibrated_data()
+   ds <- read.csv("last_data.csv", headers = TRUE)
    train <- ds[0: (nrow(ds) * TRAIN_SIZE),]
    test <- ds[(nrow(ds) * TRAIN_SIZE):nrow(ds),]
    
@@ -392,14 +396,6 @@ iml <- function()
    
    return(sum_df)
 }
-# 
-# x = iml()
-# a
-# v = t(unlist(x))
-# 
-# 
-# write.table(v ,"test.csv")
-# write.table(v ,"test.csv", append = TRUE, col.names = FALSE)
 
 dist_test <- function(){
    NUM_SIMS = 500
@@ -418,5 +414,7 @@ dist_test <- function(){
    }
 }
 
-dist_test()
-#iml()
+#dist_test()
+iml()
+
+})

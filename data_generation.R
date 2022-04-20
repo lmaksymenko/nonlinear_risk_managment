@@ -73,4 +73,4 @@ gen_calibrated_data <- function(){
 }
 
 
-pairs(gen_calibrated_data())
+#pairs(gen_calibrated_data())
