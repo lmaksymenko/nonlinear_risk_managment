@@ -164,6 +164,7 @@ fit_ale <- function(model, x_var, train, y_hat_i, plotting)
    #returning in this format flattens the lists
 }
 
+##EXPERIMENTAL
 calc_mec_exp2 <- function(model, x_var, ale_Js, tol, var_Js, plotting)
 {
    num_sample <- 5
@@ -227,7 +228,7 @@ calc_mec_exp2 <- function(model, x_var, ale_Js, tol, var_Js, plotting)
    return(MEC_model1 )
    
 }
-
+##EXPERIMENTAL
 calc_mec_exp <- function(model, x_var, ale_Js, tol, var_Js, plotting)
 {
    epsilon <- tol # set tolerance
