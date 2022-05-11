@@ -11,7 +11,17 @@ gen_corr_data <- function(corr_mat, f_sd, f_mu, num_obs){
    return(mvrnorm(n = num_obs, mu = f_mu, Sigma = cov_mat))
 }
 
-
+gen_2_ord <- function(data, weights){
+  
+  Y = 0
+  i = 1
+  #first order
+  for(j in len(data)){
+    
+  }
+  #second order
+  
+}
 
 
 gen_manual_data <- function(){
@@ -26,7 +36,13 @@ gen_manual_data <- function(){
   
   raw = gen_corr_data(corr_mat, sd, m, num)
   
-  Y = 3*raw[,1] + 2*raw[,2]^3 + 1*raw[,3]
+  eps = rnorm(n = num, sd = 0.001)
+  
+  Y = 1*raw[,1] + 1*raw[,2] + 1*raw[,3] 
+      + 1*raw[,1]*raw[,2] + 1*raw[,2]*raw[,3] + 1*raw[,1]*raw[,3]
+      + 1*raw[,1]^2 + 1*raw[,2]^2 + 1*raw[,3]^2 + eps
+  
+  
   raw_df = data.frame(raw, Y)
   
   return(raw_df)
@@ -47,14 +63,17 @@ gen_manual_data <- function(){
 gen_calibrated_data <- function(){
   data = read.csv('data/monthlyffdata.csv', header = TRUE)
   colnames(data)
+  
   #remove risk free rate
   if(c("RF") %in% colnames(data)){
     data = data[, -which(names(data) == "RF")]
   }
+  
   colnames(data) = c(1:length(data))
   
   cov(data)
-  #divide by 100 because the data is formatted as monthly and as a percent (eg: 2.58%)
+  #divide by 20 because the data is monthly 
+  #divide by 100 bc data as a percent (eg: 2.58%)
   cov_mat = cov(data)/20/100
   means = unlist(lapply(data, mean))/20/100
   #sds = lapply(data, sd)
@@ -63,14 +82,24 @@ gen_calibrated_data <- function(){
   
   raw = mvrnorm(n = num, mu = means, Sigma = cov_mat)
   
-  # we need to add noise
-  eps = rnorm(n = num, sd = 0.001)
-  #Y = 0.25*raw[,1] + 0.25*raw[,2] + 0.25*raw[,3] + eps
-  Y = 0.25*raw[,1]^2 + 0.25*raw[,2]^2 + 0.25*raw[,3]^2 + eps
+  
+  eps = rnorm(n = num, sd = 0.001)#noise
+  
+  Y = 1*raw[,1] + 1*raw[,2] + 1*raw[,3] 
+  + 1*raw[,1]*raw[,2] + 1*raw[,2]*raw[,3] + 1*raw[,1]*raw[,3]
+  + 1*raw[,1]^2 + 1*raw[,2]^2 + 1*raw[,3]^2 + eps
+  
   raw_df = data.frame(raw, Y)
   
   return(raw_df)
 }
 
 
+
 #pairs(gen_calibrated_data())
+
+
+
+###Recession regime data
+combn(4,2)
+

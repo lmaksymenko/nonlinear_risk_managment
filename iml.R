@@ -406,6 +406,7 @@ get_xj_slope <- function(loess_model, vec_xval){
 
 iid_backtest_returns <- function(model, loess_model_list, data, x_var){
    ##iid backtest the hedging for a single model
+   #returns sd underlying, sd protfolio, return underlying, return portfolio
    
    #get beta matrix for X vars
    betas = sapply(x_var, function(x) return (get_xj_slope(loess_model_list[[which(x == x_var)]], data[x])) )
@@ -423,11 +424,13 @@ iid_backtest_returns <- function(model, loess_model_list, data, x_var){
    base = (sd(data[["Y"]]))
    hedged = (sd(returns, na.rm = TRUE))
    
-   return(c(base,hedged))
+   base_ret = prod(data[["Y"]])
+   hedged_ret = prod(returns)
+   
+   return(c(base,hedged,base_ret,hedged_ret))
 } 
 
-iml <- function()
-{
+iml <- function(){
    # cl <- makePSOCKcluster(detectCores())
    # registerDoParallel(cl)
    
@@ -512,6 +515,8 @@ iml <- function()
    # stopCluster(cl)
    # registerDoSEQ()
    
+   base_sd_seq <- c()
+   hedge_sd_seq <- c()
    base_ret_seq <- c()
    hedge_ret_seq <- c()
    
@@ -519,8 +524,12 @@ iml <- function()
    for (model_i in model_list) {
       cat(model_i, "backtest \n")
       tmp = iid_backtest_returns(model_i, loess_model_seq[[which(model_i == model_list)]], test, x_var)
-      base_ret_seq = c(base_ret_seq, tmp[1])
-      hedge_ret_seq = c(hedge_ret_seq, tmp[2])
+      
+      #
+      base_sd_seq = c(base_sd_seq, tmp[1])
+      hedge_sd_seq = c(hedge_sd_seq, tmp[2])
+      base_ret_seq <- c(base_ret_seq, tmp[3])
+      hedge_ret_seq <- c(hedge_ret_seq, tmp[4])
    }
    ####
    
@@ -532,8 +541,12 @@ iml <- function()
                         MSE_Train = MSE_train_seq,
                         MSE_Test = MSE_test_seq,
                         MSE_Test_MEC_prop = MSE_test_seq * MEC_model_seq,
+                        Base_Ret_Sd = base_sd_seq,
+                        Hedge_Ret_Sd = hedge_sd_seq,
                         Base_Ret = base_ret_seq,
-                        Hedge_Ret = hedge_ret_seq)
+                        Hedge_Ret = hedge_ret_seq,
+                        Base_Sharpe = base_ret_seq/base_sd_seq,
+                        Hedge_Sharpe = Hedge_ret_seq/Hedge_sd_seq)
    print(sum_df)
    return(sum_df)
 }
