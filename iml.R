@@ -424,15 +424,15 @@ iid_backtest_returns <- function(model, loess_model_list, data, x_var){
    base = (sd(data[["Y"]]))
    hedged = (sd(returns, na.rm = TRUE))
    
-   base_ret = prod(data[["Y"]])
-   hedged_ret = prod(returns)
+   base_ret = prod(data[["Y"]] + 1) - 1
+   hedged_ret = prod(returns + 1, na.rm = TRUE) - 1
    
    return(c(base,hedged,base_ret,hedged_ret))
 } 
 
 iml <- function(){
-   # cl <- makePSOCKcluster(detectCores())
-   # registerDoParallel(cl)
+   cl <- makePSOCKcluster(detectCores())
+   registerDoParallel(cl)
    
    
    #### CONFIGS ####
@@ -446,10 +446,15 @@ iml <- function(){
    TRAIN_SIZE = 0.5
    PLOTTING = T
    ##################
+   
+   
+   
    clear_figures(model_list)
    
-   #ds <- gen_calibrated_data()
-   ds <- read.csv("last_data.csv", header = TRUE, row.names=1)
+   ds <- gen_calibrated_data()
+
+   # ds <- read.csv("last_data.csv", header = TRUE, row.names=1) #testing data
+   
    train <- ds[0: (nrow(ds) * TRAIN_SIZE),]
    test <- ds[(nrow(ds) * TRAIN_SIZE):nrow(ds),]
    
@@ -504,16 +509,16 @@ iml <- function(){
       
      
       #### MEC
-      tmp_mec = calc_mec(train_model, x_var, tmp_ale[[1]], 0.05, tmp_ale[[2]], PLOTTING) ## change to 90% complexity
+      tmp_mec = calc_mec(train_model, x_var, tmp_ale[[1]], 0.1, tmp_ale[[2]], PLOTTING) ## change to 90% complexity
       
-      calc_mec_exp2(train_model, x_var, tmp_ale[[1]], 0.05, tmp_ale[[2]], PLOTTING)
+      #calc_mec_exp2(train_model, x_var, tmp_ale[[1]], 0.05, tmp_ale[[2]], PLOTTING) #testing
       #cat("actual mec: ", tmp_mec)
       
       MEC_model_seq <- c(MEC_model_seq, tmp_mec)
       
    }
-   # stopCluster(cl)
-   # registerDoSEQ()
+   stopCluster(cl)
+   registerDoSEQ()
    
    base_sd_seq <- c()
    hedge_sd_seq <- c()
@@ -546,7 +551,7 @@ iml <- function(){
                         Base_Ret = base_ret_seq,
                         Hedge_Ret = hedge_ret_seq,
                         Base_Sharpe = base_ret_seq/base_sd_seq,
-                        Hedge_Sharpe = Hedge_ret_seq/Hedge_sd_seq)
+                        Hedge_Sharpe = hedge_ret_seq/hedge_sd_seq)
    print(sum_df)
    return(sum_df)
 }
@@ -576,5 +581,5 @@ dist_test <- function(){
    }
 }
 
-#dist_test()
-iml()
+dist_test()
+#iml()

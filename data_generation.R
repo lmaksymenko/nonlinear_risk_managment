@@ -71,13 +71,14 @@ gen_calibrated_data <- function(){
   
   colnames(data) = c(1:length(data))
   
-  cov(data)
+  print(cov(data))
+  
   #divide by 20 because the data is monthly 
   #divide by 100 bc data as a percent (eg: 2.58%)
   cov_mat = cov(data)/20/100
   means = unlist(lapply(data, mean))/20/100
   #sds = lapply(data, sd)
-  num = 1000
+  num = 100
   
   
   raw = mvrnorm(n = num, mu = means, Sigma = cov_mat)
@@ -96,7 +97,7 @@ gen_calibrated_data <- function(){
 
 
 
-#pairs(gen_calibrated_data())
+pairs(gen_calibrated_data())
 
 
 
