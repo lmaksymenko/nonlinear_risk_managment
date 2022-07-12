@@ -73,6 +73,8 @@ gen_calibrated_data <- function(){
   
   print(cov(data))
   
+  pairs(data)
+  
   #divide by 20 because the data is monthly 
   #divide by 100 bc data as a percent (eg: 2.58%)
   cov_mat = cov(data)/20/100

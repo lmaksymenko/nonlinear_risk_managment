@@ -452,7 +452,9 @@ iml <- function(){
    clear_figures(model_list)
    
    ds <- gen_calibrated_data()
-
+   
+   pairs(ds)
+   
    # ds <- read.csv("last_data.csv", header = TRUE, row.names=1) #testing data
    
    train <- ds[0: (nrow(ds) * TRAIN_SIZE),]
@@ -581,5 +583,5 @@ dist_test <- function(){
    }
 }
 
-dist_test()
-#iml()
+#dist_test()
+iml()
